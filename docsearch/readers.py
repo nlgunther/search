@@ -11,10 +11,6 @@ class BaseReader(ABC):
         pass
 
 class ZipXmlReader(BaseReader):
-    """
-    Base class for formats that are Zipped XML (ODT, DOCX).
-    Subclasses define which internal XML file and tags to target.
-    """
     xml_filename = ""
     tag_name = ""
     namespace = ""
