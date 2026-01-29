@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docsearch"
+version = "1.0.0"
+description = "High-performance document search tool."
+dependencies = [
+    "pypdf>=3.0.0",
+    "openpyxl>=3.1.0",
+    "tqdm>=4.60.0",
+    "textual>=0.40.0"
+]
+
+[project.scripts]
+docsearch = "docsearch.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["docsearch*"]
