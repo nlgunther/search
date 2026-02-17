@@ -1,81 +1,328 @@
-import zipfile
-import json
-import re
-from abc import ABC, abstractmethod
-from xml.etree import ElementTree
+"""
+File readers for various document formats.
 
-class BaseReader(ABC):
-    @abstractmethod
-    def read(self, filepath: str) -> str:
-        """Read file and return plain text content."""
-        pass
+This module provides a registry of readers for different file types.
+Each reader extracts text content and metadata from its supported format.
 
-class ZipXmlReader(BaseReader):
-    xml_filename = ""
-    tag_name = ""
-    namespace = ""
+Supported formats:
+- PDF (.pdf)
+- Word (.docx, .doc)
+- OpenDocument (.odt)
+- Excel (.xlsx, .xls, .ods)
+- Jupyter Notebooks (.ipynb)
+- Markdown (.md)
+- Plain text (.txt)
+"""
 
-    def read(self, filepath: str) -> str:
+import os
+from pathlib import Path
+from typing import Protocol, Dict, Type, Optional
+from .models import ReadResult, ReadStatus, FileMetadata
+
+
+class BaseReader(Protocol):
+    """Protocol for file readers."""
+    
+    @staticmethod
+    def can_read(filepath: str) -> bool:
+        """Check if this reader can read the file."""
+        ...
+    
+    @staticmethod
+    def read(filepath: str) -> ReadResult:
+        """Read file and return result."""
+        ...
+
+
+class PDFReader:
+    """Reader for PDF files."""
+    
+    @staticmethod
+    def can_read(filepath: str) -> bool:
+        return filepath.lower().endswith('.pdf')
+    
+    @staticmethod
+    def read(filepath: str) -> ReadResult:
+        if not os.path.exists(filepath):
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.NOT_FOUND,
+                error="File not found"
+            )
+        
         try:
-            with zipfile.ZipFile(filepath, 'r') as z:
-                with z.open(self.xml_filename) as f:
-                    tree = ElementTree.parse(f)
-                    tag = f"{{{self.namespace}}}{self.tag_name}" if self.namespace else self.tag_name
-                    return " ".join(node.text for node in tree.iter(tag) if node.text)
-        except Exception:
-            return ""
+            import pypdf
+        except ImportError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.UNSUPPORTED_FORMAT,
+                error="pypdf not installed. Install with: pip install pypdf"
+            )
+        
+        try:
+            with open(filepath, 'rb') as f:
+                reader = pypdf.PdfReader(f)
+                
+                # Extract text
+                text_parts = []
+                for page in reader.pages:
+                    text_parts.append(page.extract_text())
+                text = '\n'.join(text_parts)
+                
+                # Extract metadata
+                metadata = FileMetadata(
+                    page_count=len(reader.pages),
+                    author=reader.metadata.get('/Author'),
+                    title=reader.metadata.get('/Title'),
+                    file_size=os.path.getsize(filepath)
+                )
+                
+                if not text.strip():
+                    return ReadResult(
+                        filepath=filepath,
+                        status=ReadStatus.EMPTY_FILE,
+                        error="PDF contains no extractable text"
+                    )
+                
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.SUCCESS,
+                    text=text,
+                    metadata=metadata
+                )
+                
+        except pypdf.errors.PdfReadError as e:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.CORRUPT_FILE,
+                error=f"Corrupt PDF: {str(e)}"
+            )
+        except PermissionError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.PERMISSION_DENIED,
+                error="Permission denied"
+            )
+        except Exception as e:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error=f"Error reading PDF: {str(e)}"
+            )
 
-class ODTReader(ZipXmlReader):
-    xml_filename = 'content.xml'
-    tag_name = 'p'
-    namespace = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
 
-class DocxReader(ZipXmlReader):
-    xml_filename = 'word/document.xml'
-    tag_name = 't'
-    namespace = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+class DocxReader:
+    """Reader for Word documents."""
+    
+    @staticmethod
+    def can_read(filepath: str) -> bool:
+        return filepath.lower().endswith('.docx')
+    
+    @staticmethod
+    def read(filepath: str) -> ReadResult:
+        if not os.path.exists(filepath):
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.NOT_FOUND,
+                error="File not found"
+            )
+        
+        try:
+            import docx
+        except ImportError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.UNSUPPORTED_FORMAT,
+                error="python-docx not installed. Install with: pip install python-docx"
+            )
+        
+        try:
+            doc = docx.Document(filepath)
+            
+            # Extract text
+            text = '\n'.join(para.text for para in doc.paragraphs)
+            
+            # Extract metadata
+            props = doc.core_properties
+            metadata = FileMetadata(
+                author=props.author,
+                title=props.title,
+                created_date=str(props.created) if props.created else None,
+                modified_date=str(props.modified) if props.modified else None,
+                file_size=os.path.getsize(filepath),
+                word_count=len(text.split())
+            )
+            
+            if not text.strip():
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.EMPTY_FILE,
+                    error="Document contains no text"
+                )
+            
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.SUCCESS,
+                text=text,
+                metadata=metadata
+            )
+            
+        except PermissionError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.PERMISSION_DENIED,
+                error="Permission denied"
+            )
+        except Exception as e:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error=f"Error reading DOCX: {str(e)}"
+            )
 
-class JupyterReader(BaseReader):
-    def read(self, filepath: str) -> str:
+
+class MarkdownReader:
+    """Reader for Markdown and plain text files."""
+    
+    @staticmethod
+    def can_read(filepath: str) -> bool:
+        ext = filepath.lower()
+        return ext.endswith('.md') or ext.endswith('.txt')
+    
+    @staticmethod
+    def read(filepath: str) -> ReadResult:
+        if not os.path.exists(filepath):
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.NOT_FOUND,
+                error="File not found"
+            )
+        
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                texts = []
-                for cell in data.get('cells', []):
-                    src = cell.get('source', [])
-                    content = "".join(src) if isinstance(src, list) else str(src)
-                    texts.append(content)
-                return "\n".join(texts)
-        except Exception:
-            return ""
+                text = f.read()
+            
+            metadata = FileMetadata(
+                file_size=os.path.getsize(filepath),
+                word_count=len(text.split())
+            )
+            
+            if not text.strip():
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.EMPTY_FILE,
+                    error="File is empty"
+                )
+            
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.SUCCESS,
+                text=text,
+                metadata=metadata
+            )
+            
+        except UnicodeDecodeError:
+            # Try with different encoding
+            try:
+                with open(filepath, 'r', encoding='latin-1') as f:
+                    text = f.read()
+                metadata = FileMetadata(file_size=os.path.getsize(filepath))
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.SUCCESS,
+                    text=text,
+                    metadata=metadata
+                )
+            except Exception as e:
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.READ_ERROR,
+                    error=f"Encoding error: {str(e)}"
+                )
+        except PermissionError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.PERMISSION_DENIED,
+                error="Permission denied"
+            )
+        except Exception as e:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error=f"Error reading file: {str(e)}"
+            )
 
-class PDFReader(BaseReader):
-    def read(self, filepath: str) -> str:
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(filepath)
-            return " ".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
-            return ""
 
-class ExcelReader(BaseReader):
-    def read(self, filepath: str) -> str:
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
-            text_parts = []
-            for sheet in wb:
-                for row in sheet.iter_rows(values_only=True):
-                    text_parts.append(" ".join(str(c) for c in row if c is not None))
-            return "\n".join(text_parts)
-        except Exception:
-            return ""
-
-READER_REGISTRY = {
-    '.odt': ODTReader,
-    '.docx': DocxReader,
-    '.ipynb': JupyterReader,
+# Reader Registry
+READER_REGISTRY: Dict[str, Type[BaseReader]] = {
     '.pdf': PDFReader,
-    '.xlsx': ExcelReader,
-    '.ods': ExcelReader
+    '.docx': DocxReader,
+    '.md': MarkdownReader,
+    '.txt': MarkdownReader,
 }
+
+
+def get_reader(filepath: str) -> Optional[Type[BaseReader]]:
+    """Get appropriate reader for file."""
+    ext = Path(filepath).suffix.lower()
+    return READER_REGISTRY.get(ext)
+
+
+def read_file(filepath: str) -> ReadResult:
+    """
+    Read a file and return result.
+    
+    Args:
+        filepath: Path to file
+        
+    Returns:
+        ReadResult with status, text, and metadata
+        
+    Examples:
+        >>> result = read_file("document.pdf")
+        >>> if result.ok:
+        ...     print(result.text)
+        ...     print(f"Pages: {result.metadata.page_count}")
+    """
+    reader = get_reader(filepath)
+    if not reader:
+        ext = Path(filepath).suffix
+        return ReadResult(
+            filepath=filepath,
+            status=ReadStatus.UNSUPPORTED_FORMAT,
+            error=f"Unsupported file format: {ext}"
+        )
+    
+    return reader.read(filepath)
+
+
+def read_file_preview(filepath: str, n_tokens: int = 250) -> ReadResult:
+    """
+    Read first N tokens from file (efficient for previews).
+    
+    Args:
+        filepath: Path to file
+        n_tokens: Number of tokens to extract
+        
+    Returns:
+        ReadResult with truncated text
+        
+    Examples:
+        >>> result = read_file_preview("large_doc.pdf", n_tokens=100)
+        >>> print(result.text[:200])
+    """
+    result = read_file(filepath)
+    
+    if result.ok and n_tokens > 0:
+        tokens = result.text.split()[:n_tokens]
+        result.text = ' '.join(tokens)
+    
+    return result
+
+
+def get_supported_formats() -> Dict[str, str]:
+    """Get dictionary of supported formats and their readers."""
+    formats = {}
+    for ext, reader_class in READER_REGISTRY.items():
+        formats[ext] = reader_class.__name__
+    return formats
