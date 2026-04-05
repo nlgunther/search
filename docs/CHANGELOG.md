@@ -2,6 +2,51 @@
 
 All notable changes to the docsearch project will be documented in this file.
 
+## [2.2.0] - 2026-04-05
+
+### Added
+
+- **File metadata search**: Filter files by dates, size, and PDF metadata
+- **New module**: `file_metadata.py` with 6 new functions
+  - `search_by_metadata()` - Search with FileMetadataFilter criteria
+  - `filter_by_date()` - Filter by modification/creation dates
+  - `filter_by_size()` - Filter by file size
+  - `filter_by_pdf_metadata()` - Filter PDFs by author/title/keywords
+  - `get_file_info()` - Get comprehensive file information
+  - `FileMetadataFilter` - Dataclass for filter criteria
+
+### Features
+
+**Date Filtering:**
+- Modified before/after
+- Created before/after
+- Multiple date input formats (ISO string, datetime, date)
+
+**Size Filtering:**
+- Minimum size
+- Maximum size
+
+**PDF Metadata:**
+- Author search
+- Title search
+- Keywords search
+- Case-sensitive/insensitive options
+- Requires `pypdf` package
+
+**Combined Filters:**
+- All criteria can be combined in FileMetadataFilter
+- AND logic (all must match)
+
+### Examples
+
+```python
+from docsearch import filter_by_date, filter_by_size
+
+# Find large files from 2024
+recent = filter_by_date(files, modified_after='2024-01-01')
+large = filter_by_size(files, min_bytes=1_000_000)
+```
+
 ## [2.1.0] - 2026-02-16
 
 ### Added

@@ -926,6 +926,275 @@ print(highlighted)
 
 ---
 
+## File Metadata Search (Dates, Size, PDF Metadata)
+
+New in v2.2.0: Search and filter files by file system metadata and PDF document metadata.
+
+### FileMetadataFilter
+
+Dataclass for specifying filter criteria.
+
+```python
+from docsearch import FileMetadataFilter
+
+@dataclass
+class FileMetadataFilter:
+    # Filename/path filters
+    name_pattern: Optional[str] = None
+    name_case_sensitive: bool = True
+    
+    # Date filters
+    modified_after: Optional[Union[datetime, date, str]] = None
+    modified_before: Optional[Union[datetime, date, str]] = None
+    created_after: Optional[Union[datetime, date, str]] = None
+    created_before: Optional[Union[datetime, date, str]] = None
+    
+    # Size filters (bytes)
+    size_min: Optional[int] = None
+    size_max: Optional[int] = None
+    
+    # Extension filter
+    extensions: Optional[List[str]] = None
+    
+    # PDF metadata filters
+    pdf_author: Optional[str] = None
+    pdf_title: Optional[str] = None
+    pdf_keywords: Optional[str] = None
+    pdf_case_sensitive: bool = False
+```
+
+**Example:**
+```python
+from docsearch import FileMetadataFilter, search_by_metadata
+
+# Define criteria
+criteria = FileMetadataFilter(
+    extensions=['.pdf'],
+    modified_after='2024-01-01',
+    size_min=1_000_000,  # 1 MB
+    pdf_author='John Doe'
+)
+
+# Search
+matches = search_by_metadata(files, criteria)
+```
+
+---
+
+### search_by_metadata()
+
+Search files using FileMetadataFilter criteria.
+
+```python
+from docsearch import search_by_metadata, FileMetadataFilter
+
+def search_by_metadata(
+    files: List[str],
+    filter_criteria: FileMetadataFilter
+) -> List[str]
+```
+
+**Parameters:**
+- `files` (List[str]): List of file paths to search
+- `filter_criteria` (FileMetadataFilter): Filter criteria
+
+**Returns:**
+- `List[str]`: List of matching file paths
+
+**Example:**
+```python
+from docsearch import search_by_metadata, FileMetadataFilter
+
+# Find large recent PDFs
+criteria = FileMetadataFilter(
+    extensions=['.pdf'],
+    modified_after='2024-01-01',
+    size_min=1_000_000
+)
+
+matches = search_by_metadata(files, criteria)
+```
+
+---
+
+### filter_by_date()
+
+Filter files by modification/creation dates (convenience function).
+
+```python
+from docsearch import filter_by_date
+
+def filter_by_date(
+    files: List[str],
+    modified_after: Optional[Union[datetime, date, str]] = None,
+    modified_before: Optional[Union[datetime, date, str]] = None,
+    created_after: Optional[Union[datetime, date, str]] = None,
+    created_before: Optional[Union[datetime, date, str]] = None
+) -> List[str]
+```
+
+**Parameters:**
+- `files` (List[str]): List of file paths
+- `modified_after`: Only files modified after this date
+- `modified_before`: Only files modified before this date
+- `created_after`: Only files created after this date
+- `created_before`: Only files created before this date
+
+**Date Formats Accepted:**
+- ISO string: '2024-01-01' or '2024-01-01 09:00:00'
+- datetime object
+- date object
+
+**Returns:**
+- `List[str]`: List of matching file paths
+
+**Examples:**
+```python
+from docsearch import filter_by_date
+from datetime import datetime, timedelta
+
+# Files modified in January 2024
+matches = filter_by_date(
+    files,
+    modified_after='2024-01-01',
+    modified_before='2024-01-31'
+)
+
+# Files created in the last week
+week_ago = datetime.now() - timedelta(days=7)
+recent = filter_by_date(files, created_after=week_ago)
+```
+
+---
+
+### filter_by_size()
+
+Filter files by size (convenience function).
+
+```python
+from docsearch import filter_by_size
+
+def filter_by_size(
+    files: List[str],
+    min_bytes: Optional[int] = None,
+    max_bytes: Optional[int] = None
+) -> List[str]
+```
+
+**Parameters:**
+- `files` (List[str]): List of file paths
+- `min_bytes` (int, optional): Minimum file size in bytes
+- `max_bytes` (int, optional): Maximum file size in bytes
+
+**Returns:**
+- `List[str]`: List of matching file paths
+
+**Examples:**
+```python
+from docsearch import filter_by_size
+
+# Files larger than 1 MB
+large = filter_by_size(files, min_bytes=1_000_000)
+
+# Files between 100 KB and 10 MB
+medium = filter_by_size(
+    files,
+    min_bytes=100_000,
+    max_bytes=10_000_000
+)
+```
+
+---
+
+### filter_by_pdf_metadata()
+
+Filter PDF files by metadata (convenience function).
+
+Requires `pypdf` to be installed.
+
+```python
+from docsearch import filter_by_pdf_metadata
+
+def filter_by_pdf_metadata(
+    files: List[str],
+    author: Optional[str] = None,
+    title: Optional[str] = None,
+    keywords: Optional[str] = None,
+    case_sensitive: bool = False
+) -> List[str]
+```
+
+**Parameters:**
+- `files` (List[str]): List of file paths
+- `author` (str, optional): Pattern to match in author field
+- `title` (str, optional): Pattern to match in title field
+- `keywords` (str, optional): Pattern to match in keywords field
+- `case_sensitive` (bool): Case-sensitive matching (default: False)
+
+**Returns:**
+- `List[str]`: List of matching PDF file paths
+
+**Examples:**
+```python
+from docsearch import filter_by_pdf_metadata
+
+# PDFs by specific author
+johns_docs = filter_by_pdf_metadata(files, author='John Doe')
+
+# PDFs with "invoice" in title (case-insensitive)
+invoices = filter_by_pdf_metadata(
+    files,
+    title='invoice',
+    case_sensitive=False
+)
+
+# PDFs with specific keywords
+reports = filter_by_pdf_metadata(files, keywords='quarterly')
+```
+
+---
+
+### get_file_info()
+
+Get comprehensive file information.
+
+```python
+from docsearch import get_file_info
+
+def get_file_info(filepath: str) -> Dict[str, Any]
+```
+
+**Parameters:**
+- `filepath` (str): Path to file
+
+**Returns:**
+- Dictionary with file information:
+  - `filepath`: Full path
+  - `filename`: Just filename
+  - `extension`: File extension
+  - `exists`: Whether file exists
+  - `size`: File size in bytes
+  - `modified`: Modification datetime
+  - `created`: Creation datetime
+  - `pdf_metadata`: PDF metadata dict (if PDF file)
+
+**Example:**
+```python
+from docsearch import get_file_info
+
+info = get_file_info('/docs/report.pdf')
+
+print(f"File: {info['filename']}")
+print(f"Size: {info['size']:,} bytes")
+print(f"Modified: {info['modified']}")
+
+if info['pdf_metadata']:
+    print(f"Author: {info['pdf_metadata']['author']}")
+    print(f"Title: {info['pdf_metadata']['title']}")
+```
+
+---
+
 ## CLI Commands
 
 ### extract

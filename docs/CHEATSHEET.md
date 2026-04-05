@@ -78,6 +78,30 @@ result = search_metadata_dict(files, r'_\d{4}')
 print(result['matched_files'])  # 1
 ```
 
+### File Metadata Search (NEW in v2.2.0)
+
+```python
+from docsearch import filter_by_date, filter_by_size, filter_by_pdf_metadata
+
+# Filter by date
+recent = filter_by_date(files, modified_after='2024-01-01')
+
+# Filter by size
+large = filter_by_size(files, min_bytes=1_000_000)  # > 1 MB
+
+# Filter PDFs by author
+docs = filter_by_pdf_metadata(files, author='John Doe')
+
+# Combined filters
+from docsearch import FileMetadataFilter, search_by_metadata
+criteria = FileMetadataFilter(
+    extensions=['.pdf'],
+    modified_after='2024-01-01',
+    size_min=1_000_000
+)
+matches = search_by_metadata(files, criteria)
+```
+
 ### Create Batch
 
 ```python
@@ -556,7 +580,7 @@ docsearch search /docs "invoice" --metadata-only -i
 
 ---
 
-**Version:** 2.1.0  
-**Last Updated:** February 16, 2026
+**Version:** 2.2.0  
+**Last Updated:** April 5, 2026
 
 For complete documentation, see [API.md](API.md) and [README.md](README.md).

@@ -1,4 +1,4 @@
-# DocSearch v2.1.0
+# DocSearch v2.2.0
 
 > A Python toolkit for document search and classification workflows with glob pattern filtering
 
@@ -23,6 +23,10 @@ docsearch extract /documents --glob "*.pdf" -o batch.md
 
 # NEW: Fast filename search (no file reading)
 docsearch search /documents "2024" --metadata-only
+
+# NEW: File metadata search (dates, size)
+from docsearch import filter_by_date
+recent = filter_by_date(files, modified_after='2024-01-01')
 ```
 
 ## Documentation
@@ -37,7 +41,8 @@ docsearch search /documents "2024" --metadata-only
 
 ✓ Multi-format support (PDF, DOCX, Markdown, Text)  
 ✓ Glob pattern filtering (case-sensitive)  
-✓ **NEW: Metadata-only search (100x+ faster)**  
+✓ **NEW: File metadata search (dates, size, PDF metadata)**  
+✓ Metadata-only search (100x+ faster)  
 ✓ Rich metadata extraction  
 ✓ Batch processing for classification  
 ✓ Explicit error handling  
@@ -75,6 +80,11 @@ batch = create_labeled_batch_from_directory(
 # NEW: Fast filename search
 from docsearch import search_metadata
 matches = search_metadata(files, '2024')
+
+# NEW: File metadata search  
+from docsearch import filter_by_date, filter_by_size
+recent = filter_by_date(files, modified_after='2024-01-01')
+large = filter_by_size(files, min_bytes=1_000_000)
 ```
 
 ### CLI
@@ -106,20 +116,23 @@ docsearch info document.pdf
 | **COMPLETE_SOURCE_CODE.md** | All source code in one file |
 | **verify_fixes.py** | Test script to verify installation |
 
-## What's New in v2.1.0
+## What's New in v2.2.0
 
-- 🚀 **New Feature**: Metadata-only search (`--metadata-only` flag)
-  - 100x+ faster than content search
-  - Works on locked/protected files
-  - Search filenames without reading files
-- 📦 **New Python API**: 4 new functions for filename searching
-  - `search_metadata()`
-  - `search_metadata_dict()`
-  - `filter_by_name_pattern()`
-  - `highlight_match()`
-- 📊 **Improved**: Search output clarity (v2.0.2)
-- 🐛 **Fixed**: Case-sensitive glob matching (v2.0.1)
-- ✅ **All tests passing** (10/10)
+- 📅 **New Feature**: File metadata search (dates, size, PDF metadata)
+  - Filter by modification/creation dates
+  - Filter by file size (min/max)
+  - Search PDF metadata (author, title, keywords)
+  - Combine multiple criteria
+- 📦 **New Python API**: 6 new functions
+  - `filter_by_date()`
+  - `filter_by_size()`
+  - `filter_by_pdf_metadata()`
+  - `search_by_metadata()`
+  - `get_file_info()`
+  - `FileMetadataFilter` dataclass
+- 🚀 **Previous**: Metadata-only search (v2.1.0)
+- 📊 **Previous**: Search output clarity (v2.0.2)
+- ✅ **All tests passing**
 
 ## Support
 
@@ -133,6 +146,6 @@ MIT License
 
 ---
 
-**Version:** 2.1.0 | **Status:** Stable | **Tests:** 10/10 ✓
+**Version:** 2.2.0 | **Status:** Stable | **Tests:** Passing ✓
 
 *For complete documentation, start with [API.md](API.md) or [CHEATSHEET.md](CHEATSHEET.md)*
