@@ -195,14 +195,17 @@ docsearch search /docs "_\d{4}_" --metadata-only
 ```
 
 **Understanding Search Output:**
+
 ```
 Total: 26 matches in 15/140 files
 ```
+
 - **26 matches** = Total pattern occurrences found
 - **15** = Number of files that contain matches
 - **140** = Total number of files searched
 
 **Metadata-Only Output:**
+
 ```
 Matched files:
   /docs/invoice_[2024]_001.pdf
@@ -232,27 +235,27 @@ docsearch formats
 
 ### Basic Patterns
 
-| Pattern | Matches | Example |
-|---------|---------|---------|
-| `*.pdf` | All PDFs | `file.pdf`, `doc.pdf` |
-| `invoice_*` | Files starting with "invoice_" | `invoice_001.pdf` |
-| `*_2024.pdf` | Files ending with "_2024.pdf" | `report_2024.pdf` |
-| `file?.pdf` | Single char after "file" | `file1.pdf`, `fileA.pdf` |
+| Pattern      | Matches                        | Example                  |
+| ------------ | ------------------------------ | ------------------------ |
+| `*.pdf`      | All PDFs                       | `file.pdf`, `doc.pdf`    |
+| `invoice_*`  | Files starting with "invoice_" | `invoice_001.pdf`        |
+| `*_2024.pdf` | Files ending with "_2024.pdf"  | `report_2024.pdf`        |
+| `file?.pdf`  | Single char after "file"       | `file1.pdf`, `fileA.pdf` |
 
 ### Recursive Patterns
 
-| Pattern | Matches | Example |
-|---------|---------|---------|
-| `**/*.pdf` | PDFs anywhere | `/a/b/file.pdf` |
-| `2024/**/*.pdf` | PDFs in/under 2024 | `/docs/2024/Q1/file.pdf` |
+| Pattern             | Matches                  | Example                       |
+| ------------------- | ------------------------ | ----------------------------- |
+| `**/*.pdf`          | PDFs anywhere            | `/a/b/file.pdf`               |
+| `2024/**/*.pdf`     | PDFs in/under 2024       | `/docs/2024/Q1/file.pdf`      |
 | `**/invoices/*.pdf` | PDFs in any invoices dir | `/any/path/invoices/file.pdf` |
 
 ### Character Classes
 
-| Pattern | Matches | Example |
-|---------|---------|---------|
-| `file[0-9]*` | Files with digit | `file1.pdf`, `file2.pdf` |
-| `file[A-Z]*` | Files with capital | `fileA.pdf`, `fileB.pdf` |
+| Pattern       | Matches             | Example                  |
+| ------------- | ------------------- | ------------------------ |
+| `file[0-9]*`  | Files with digit    | `file1.pdf`, `file2.pdf` |
+| `file[A-Z]*`  | Files with capital  | `fileA.pdf`, `fileB.pdf` |
 | `file[!0-9]*` | Files without digit | `fileA.pdf`, `file_.pdf` |
 
 ### Multiple Patterns
@@ -265,6 +268,7 @@ docsearch formats
 ### Important
 
 **Glob matching is CASE-SENSITIVE on all platforms:**
+
 - `*.pdf` matches `file.pdf` ✓
 - `*.pdf` does NOT match `file.PDF` ✗
 
@@ -300,15 +304,15 @@ elif result.status == ReadStatus.PERMISSION_DENIED:
 
 ### Error Status Values
 
-| Status | Meaning |
-|--------|---------|
-| `SUCCESS` | Worked |
-| `NOT_FOUND` | File doesn't exist |
-| `PERMISSION_DENIED` | No permission |
-| `UNSUPPORTED_FORMAT` | Wrong file type |
-| `CORRUPT_FILE` | File damaged |
-| `EMPTY_FILE` | No content |
-| `READ_ERROR` | Other error |
+| Status               | Meaning            |
+| -------------------- | ------------------ |
+| `SUCCESS`            | Worked             |
+| `NOT_FOUND`          | File doesn't exist |
+| `PERMISSION_DENIED`  | No permission      |
+| `UNSUPPORTED_FORMAT` | Wrong file type    |
+| `CORRUPT_FILE`       | File damaged       |
+| `EMPTY_FILE`         | No content         |
+| `READ_ERROR`         | Other error        |
 
 ---
 
@@ -441,23 +445,27 @@ ls -l document.pdf
 ## Performance Tips
 
 1. **Use previews** for classification (faster)
+   
    ```python
    result = read_file_preview("doc.pdf", n_tokens=250)
    ```
 
 2. **Filter early** with glob patterns
+   
    ```python
    files = collect_files("/docs")
    pdfs = filter_files_by_glob(files, "*.pdf")  # Filter before processing
    ```
 
 3. **Parallel processing** for many files
+   
    ```python
    with ThreadPoolExecutor(max_workers=4) as executor:
        results = executor.map(read_file, files)
    ```
 
 4. **Non-recursive** if only need top level
+   
    ```bash
    docsearch extract /docs --no-recursive
    ```
@@ -526,12 +534,12 @@ docsearch info test.pdf
 
 ## Supported Formats
 
-| Extension | Reader | Install |
-|-----------|--------|---------|
-| `.pdf` | PDFReader | `pip install pypdf` |
-| `.docx` | DocxReader | `pip install python-docx` |
-| `.md` | MarkdownReader | Built-in |
-| `.txt` | MarkdownReader | Built-in |
+| Extension | Reader         | Install                   |
+| --------- | -------------- | ------------------------- |
+| `.pdf`    | PDFReader      | `pip install pypdf`       |
+| `.docx`   | DocxReader     | `pip install python-docx` |
+| `.md`     | MarkdownReader | Built-in                  |
+| `.txt`    | MarkdownReader | Built-in                  |
 
 ---
 
@@ -576,6 +584,8 @@ docsearch extract /docs --glob "*.pdf,*.docx" -o docs.md
 
 # Find files by name (fast)
 docsearch search /docs "invoice" --metadata-only -i
+
+
 ```
 
 ---

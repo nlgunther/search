@@ -22,6 +22,7 @@ from .batch import (
 )
 from .glob_filter import apply_glob_filter
 from .metadata_search import highlight_match
+from .file_metadata import filter_by_date, filter_by_size, FileMetadataFilter, search_by_metadata
 from .models import ReadStatus
 
 
@@ -95,6 +96,17 @@ Search Modes:
   Default:          Search file contents
   --metadata-only:  Search filenames/paths only (fast, no file reading)
 
+File Metadata Filters (v2.3.0):
+  --modified-after DATE    Files modified after date (YYYY-MM-DD)
+  --modified-before DATE   Files modified before date (YYYY-MM-DD)
+  --created-after DATE     Files created after date (YYYY-MM-DD)
+  --created-before DATE    Files created before date (YYYY-MM-DD)
+  --size-min BYTES         Files larger than size (bytes)
+  --size-max BYTES         Files smaller than size (bytes)
+  --extension EXT          Filter by extension (e.g., .pdf)
+  --pdf-author PATTERN     Filter PDFs by author
+  --pdf-title PATTERN      Filter PDFs by title
+
 Examples:
   # Search file contents
   docsearch search /docs "invoice" --glob "*.pdf"
@@ -102,8 +114,14 @@ Examples:
   # Search filenames only (fast)
   docsearch search /docs "2024-\d+" --metadata-only
   
-  # Find files with "invoice" in path
-  docsearch search /docs "invoice" --metadata-only -i
+  # Files modified in 2026
+  docsearch search /docs ".*" --metadata-only --modified-after 2026-01-01 --modified-before 2026-12-31
+  
+  # Large PDFs modified recently
+  docsearch search /docs ".*" --metadata-only --modified-after 2026-01-01 --size-min 1000000 --extension .pdf
+  
+  # PDFs by specific author
+  docsearch search /docs ".*" --metadata-only --pdf-author "John Doe"
 """
     )
     search_parser.add_argument('path', help='Directory or file to search')
@@ -116,6 +134,26 @@ Examples:
     search_parser.add_argument('-r', '--recursive', action='store_true', default=True)
     search_parser.add_argument('--no-recursive', action='store_false', dest='recursive')
     search_parser.add_argument('-v', '--verbose', action='store_true')
+    
+    # File metadata filters (v2.3.0)
+    search_parser.add_argument('--modified-after', metavar='DATE',
+                              help='Filter files modified after date (YYYY-MM-DD)')
+    search_parser.add_argument('--modified-before', metavar='DATE',
+                              help='Filter files modified before date (YYYY-MM-DD)')
+    search_parser.add_argument('--created-after', metavar='DATE',
+                              help='Filter files created after date (YYYY-MM-DD)')
+    search_parser.add_argument('--created-before', metavar='DATE',
+                              help='Filter files created before date (YYYY-MM-DD)')
+    search_parser.add_argument('--size-min', type=int, metavar='BYTES',
+                              help='Filter files larger than size (bytes)')
+    search_parser.add_argument('--size-max', type=int, metavar='BYTES',
+                              help='Filter files smaller than size (bytes)')
+    search_parser.add_argument('--extension', '--ext', metavar='EXT',
+                              help='Filter by extension (e.g., .pdf)')
+    search_parser.add_argument('--pdf-author', metavar='PATTERN',
+                              help='Filter PDFs by author pattern')
+    search_parser.add_argument('--pdf-title', metavar='PATTERN',
+                              help='Filter PDFs by title pattern')
     
     # INFO command
     info_parser = subparsers.add_parser('info', help='Show file information')
@@ -192,6 +230,62 @@ def cmd_extract(args):
     return 0
 
 
+def apply_metadata_filters(files, args):
+    """
+    Apply file metadata filters based on command-line arguments.
+    
+    Args:
+        files: List of file paths
+        args: Parsed command-line arguments
+        
+    Returns:
+        Filtered list of file paths
+    """
+    # Check if any metadata filters are specified
+    has_filters = any([
+        getattr(args, 'modified_after', None),
+        getattr(args, 'modified_before', None),
+        getattr(args, 'created_after', None),
+        getattr(args, 'created_before', None),
+        getattr(args, 'size_min', None),
+        getattr(args, 'size_max', None),
+        getattr(args, 'extension', None),
+        getattr(args, 'pdf_author', None),
+        getattr(args, 'pdf_title', None)
+    ])
+    
+    if not has_filters:
+        return files
+    
+    # Build filter criteria
+    criteria = FileMetadataFilter(
+        modified_after=getattr(args, 'modified_after', None),
+        modified_before=getattr(args, 'modified_before', None),
+        created_after=getattr(args, 'created_after', None),
+        created_before=getattr(args, 'created_before', None),
+        size_min=getattr(args, 'size_min', None),
+        size_max=getattr(args, 'size_max', None),
+        extensions=[args.extension] if getattr(args, 'extension', None) else None,
+        pdf_author=getattr(args, 'pdf_author', None),
+        pdf_title=getattr(args, 'pdf_title', None)
+    )
+    
+    if args.verbose:
+        print(f"Applying metadata filters to {len(files)} files...", file=sys.stderr)
+    
+    try:
+        filtered = search_by_metadata(files, criteria)
+        
+        if args.verbose:
+            print(f"Metadata filters matched {len(filtered)}/{len(files)} files", file=sys.stderr)
+        
+        return filtered
+    except Exception as e:
+        print(f"Warning: Metadata filtering failed: {e}", file=sys.stderr)
+        print(f"Proceeding with unfiltered files", file=sys.stderr)
+        return files
+
+
 def _search_metadata(files, pattern, verbose):
     """
     Search only filenames/paths (no file reading).
@@ -228,7 +322,7 @@ def _search_metadata(files, pattern, verbose):
 
 
 def cmd_search(args):
-    """Handle search command with glob filtering."""
+    """Handle search command with glob and metadata filtering."""
     
     # Compile pattern
     flags = re.IGNORECASE if args.ignore_case else 0
@@ -246,6 +340,13 @@ def cmd_search(args):
     
     # Apply glob filter
     files = apply_glob_filter(files, args.glob, args.verbose)
+    
+    # Apply metadata filters (NEW in v2.3.0)
+    files = apply_metadata_filters(files, args)
+    
+    if not files:
+        print("No files matched filters", file=sys.stderr)
+        return 0
     
     # Metadata-only search (fast - no file reading)
     if args.metadata_only:
