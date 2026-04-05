@@ -259,7 +259,6 @@ READER_REGISTRY: Dict[str, Type[BaseReader]] = {
     '.docx': DocxReader,
     '.md': MarkdownReader,
     '.txt': MarkdownReader,
-    '.py': MarkdownReader,
 }
 
 

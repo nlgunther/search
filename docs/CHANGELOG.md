@@ -2,6 +2,54 @@
 
 All notable changes to the docsearch project will be documented in this file.
 
+## [2.1.0] - 2026-02-16
+
+### Added
+
+- **Metadata-only search**: New `--metadata-only` (`-m`) flag for searching filenames/paths without reading files
+- **Python API for metadata search**: Four new functions exported from `docsearch.metadata_search`
+  - `search_metadata()` - Search filenames with position info
+  - `search_metadata_dict()` - Search with detailed statistics
+  - `filter_by_name_pattern()` - Simple filename filtering
+  - `highlight_match()` - Highlight matched portion in paths
+
+### Benefits
+
+- **Speed**: 100x+ faster than content search for large directories
+- **No file access**: Works on locked/protected files
+- **Highlighted output**: Shows exactly what matched in the filename
+
+### Examples
+
+```bash
+# CLI - Search filenames only
+docsearch search /docs "2024" --metadata-only
+
+# Python API
+from docsearch import search_metadata, filter_by_name_pattern
+
+matches = search_metadata(files, '2024')
+invoices = filter_by_name_pattern(files, 'invoice', case_sensitive=False)
+```
+
+## [2.0.2] - 2026-02-16
+
+### Improved
+
+- **Search output clarity**: Summary now shows "X matches in Y/Z files" where Y = files with matches, Z = total files searched
+- **Verbose search**: Added `-v` flag to show which files are being searched in real-time
+
+### Example
+
+```bash
+# Before (confusing):
+Total: 26 matches in 140 files
+
+# After (clear):
+Total: 26 matches in 15/140 files
+# Means: 26 total occurrences found in 15 files (out of 140 searched)
+```
+
 ## [2.0.1] - 2026-02-16
 
 ### Fixed

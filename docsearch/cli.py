@@ -21,6 +21,7 @@ from .batch import (
     files_from_file, BatchCollection, Batch, BatchEntry
 )
 from .glob_filter import apply_glob_filter
+from .metadata_search import highlight_match
 from .models import ReadStatus
 
 
@@ -87,13 +88,31 @@ Glob Pattern Examples:
     # SEARCH command
     search_parser = subparsers.add_parser(
         'search',
-        help='Search files for pattern'
+        help='Search files for pattern',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=r"""
+Search Modes:
+  Default:          Search file contents
+  --metadata-only:  Search filenames/paths only (fast, no file reading)
+
+Examples:
+  # Search file contents
+  docsearch search /docs "invoice" --glob "*.pdf"
+  
+  # Search filenames only (fast)
+  docsearch search /docs "2024-\d+" --metadata-only
+  
+  # Find files with "invoice" in path
+  docsearch search /docs "invoice" --metadata-only -i
+"""
     )
     search_parser.add_argument('path', help='Directory or file to search')
     search_parser.add_argument('pattern', help='Regex pattern')
     search_parser.add_argument('-g', '--glob', help='Glob pattern to filter files')
     search_parser.add_argument('-i', '--ignore-case', action='store_true',
                               help='Case-insensitive search')
+    search_parser.add_argument('-m', '--metadata-only', action='store_true',
+                              help='Search filenames/paths only (no file reading)')
     search_parser.add_argument('-r', '--recursive', action='store_true', default=True)
     search_parser.add_argument('--no-recursive', action='store_false', dest='recursive')
     search_parser.add_argument('-v', '--verbose', action='store_true')
@@ -173,6 +192,41 @@ def cmd_extract(args):
     return 0
 
 
+def _search_metadata(files, pattern, verbose):
+    """
+    Search only filenames/paths (no file reading).
+    
+    Args:
+        files: List of file paths
+        pattern: Compiled regex pattern
+        verbose: Show verbose output
+        
+    Returns:
+        Exit code (0 = success)
+    """
+    matches_found = []
+    
+    for filepath in files:
+        if verbose:
+            print(f"Checking: {filepath}", file=sys.stderr)
+        
+        # Search in full path
+        match = pattern.search(filepath)
+        if match:
+            matches_found.append((filepath, match.span()))
+    
+    # Display results
+    if matches_found:
+        print(f"\nMatched files:")
+        for filepath, (start, end) in matches_found:
+            # Highlight the match in the path
+            highlighted = highlight_match(filepath, start, end)
+            print(f"  {highlighted}")
+    
+    print(f"\nTotal: {len(matches_found)} files matched (out of {len(files)} searched)", file=sys.stderr)
+    return 0
+
+
 def cmd_search(args):
     """Handle search command with glob filtering."""
     
@@ -193,15 +247,24 @@ def cmd_search(args):
     # Apply glob filter
     files = apply_glob_filter(files, args.glob, args.verbose)
     
-    # Search files
+    # Metadata-only search (fast - no file reading)
+    if args.metadata_only:
+        return _search_metadata(files, pattern, args.verbose)
+    
+    # Content search (reads files)
     total_matches = 0
+    files_with_matches = 0
     
     for filepath in files:
+        if args.verbose:
+            print(f"Searching: {filepath}", file=sys.stderr)
+        
         result = read_file(filepath)
         
         if result.ok:
             matches = list(pattern.finditer(result.text))
             if matches:
+                files_with_matches += 1
                 total_matches += len(matches)
                 print(f"\n{filepath}: {len(matches)} matches")
                 
@@ -215,7 +278,7 @@ def cmd_search(args):
                 if len(matches) > 5:
                     print(f"  ... and {len(matches) - 5} more matches")
     
-    print(f"\nTotal: {total_matches} matches in {len(files)} files", file=sys.stderr)
+    print(f"\nTotal: {total_matches} matches in {files_with_matches}/{len(files)} files", file=sys.stderr)
     return 0
 
 

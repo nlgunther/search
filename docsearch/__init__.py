@@ -25,7 +25,7 @@ Basic Usage:
     ... )
 """
 
-__version__ = "2.0.1"
+__version__ = "2.1.0"
 
 # Core reading functions
 from .readers import (
@@ -62,6 +62,14 @@ from .glob_filter import (
     apply_glob_filter,
 )
 
+# Metadata search (fast filename/path search)
+from .metadata_search import (
+    search_metadata,
+    search_metadata_dict,
+    filter_by_name_pattern,
+    highlight_match,
+)
+
 # Public API
 __all__ = [
     # Version
@@ -93,4 +101,10 @@ __all__ = [
     'glob_matches',
     'filter_files_by_glob',
     'apply_glob_filter',
+    
+    # Metadata search
+    'search_metadata',
+    'search_metadata_dict',
+    'filter_by_name_pattern',
+    'highlight_match',
 ]
