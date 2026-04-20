@@ -42,14 +42,23 @@ class TestGlobMatching:
         assert glob_matches("/docs/file1.pdf", "file[0-9]*")
     
     def test_case_sensitivity(self):
-        """Test case-sensitive matching."""
-        # Pattern matching is case-sensitive
+        """Test case-sensitive matching (platform-specific)."""
+        import platform
+        
+        # Pattern matching is case-sensitive on Unix/Linux
+        # Pattern matching is case-insensitive on Windows
         assert glob_matches("/docs/file.pdf", "*.pdf")
-        # Note: On Windows, filesystem may be case-insensitive,
-        # but pattern matching itself is case-sensitive
-        # This test verifies the pattern matcher behavior
-        assert glob_matches("/docs/file.PDF", "*.PDF")
-        assert not glob_matches("/docs/file.pdf", "*.PDF")
+        
+        is_windows = platform.system() == 'Windows'
+        
+        if is_windows:
+            # On Windows: case-insensitive (*.pdf matches *.PDF)
+            assert glob_matches("/docs/file.PDF", "*.pdf")
+            assert glob_matches("/docs/file.pdf", "*.PDF")
+        else:
+            # On Unix/Linux: case-sensitive (*.pdf does NOT match *.PDF)
+            assert glob_matches("/docs/file.PDF", "*.PDF")
+            assert not glob_matches("/docs/file.pdf", "*.PDF")
 
 
 class TestFileFiltering:
@@ -395,6 +404,143 @@ class TestFileMetadataSearch:
             assert matches[0].endswith('.pdf')
 
 
+class TestSearchOutput:
+    """Test search command with --output flag."""
+    
+    def test_search_with_output_file(self):
+        """Test search command writes to output file."""
+        import tempfile
+        import os
+        import sys
+        from io import StringIO
+        
+        # Add parent directory to path for CLI import
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test files
+            test_file = os.path.join(tmpdir, 'test.txt')
+            with open(test_file, 'w') as f:
+                f.write('This contains the word invoice in the text.')
+            
+            output_file = os.path.join(tmpdir, 'results.txt')
+            
+            # Simulate command-line arguments
+            class Args:
+                path = tmpdir
+                pattern = 'invoice'
+                glob = None
+                ignore_case = False
+                metadata_only = False
+                output = output_file
+                recursive = True
+                verbose = False
+                modified_after = None
+                modified_before = None
+                created_after = None
+                created_before = None
+                size_min = None
+                size_max = None
+                extension = None
+                pdf_author = None
+                pdf_title = None
+            
+            args = Args()
+            
+            # Import and run command
+            from docsearch.cli import cmd_search
+            
+            # Capture stderr
+            old_stderr = sys.stderr
+            sys.stderr = StringIO()
+            
+            try:
+                result = cmd_search(args)
+                stderr_output = sys.stderr.getvalue()
+                
+                # Check command succeeded
+                assert result == 0
+                
+                # Check output file was created
+                assert os.path.exists(output_file)
+                
+                # Check output file contains match
+                with open(output_file, 'r') as f:
+                    content = f.read()
+                    assert 'invoice' in content.lower()
+                    assert test_file in content
+                
+                # Check stderr contains summary
+                assert 'Total:' in stderr_output
+                assert 'Results written to:' in stderr_output
+                
+            finally:
+                sys.stderr = old_stderr
+    
+    def test_search_metadata_with_output(self):
+        """Test metadata search with output file."""
+        import tempfile
+        import os
+        import sys
+        from io import StringIO
+        
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test files
+            test_file1 = os.path.join(tmpdir, 'invoice_2024.txt')
+            test_file2 = os.path.join(tmpdir, 'report.txt')
+            
+            with open(test_file1, 'w') as f:
+                f.write('test')
+            with open(test_file2, 'w') as f:
+                f.write('test')
+            
+            output_file = os.path.join(tmpdir, 'results.txt')
+            
+            class Args:
+                path = tmpdir
+                pattern = '2024'
+                glob = None
+                ignore_case = False
+                metadata_only = True
+                output = output_file
+                recursive = True
+                verbose = False
+                modified_after = None
+                modified_before = None
+                created_after = None
+                created_before = None
+                size_min = None
+                size_max = None
+                extension = None
+                pdf_author = None
+                pdf_title = None
+            
+            args = Args()
+            
+            from docsearch.cli import cmd_search
+            
+            old_stderr = sys.stderr
+            sys.stderr = StringIO()
+            
+            try:
+                result = cmd_search(args)
+                
+                assert result == 0
+                assert os.path.exists(output_file)
+                
+                with open(output_file, 'r') as f:
+                    content = f.read()
+                    # Check for pattern match (may have highlight brackets)
+                    assert '2024' in content
+                    assert 'invoice' in content
+                    assert 'Matched files' in content
+                    
+            finally:
+                sys.stderr = old_stderr
+
+
 if __name__ == "__main__":
     if HAS_PYTEST:
         pytest.main([__file__, "-v"])
@@ -408,7 +554,8 @@ if __name__ == "__main__":
             TestBatchFormat,
             TestReadResult,
             TestMetadataSearch,
-            TestFileMetadataSearch
+            TestFileMetadataSearch,
+            TestSearchOutput
         ]
         
         total_tests = 0

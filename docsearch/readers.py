@@ -259,6 +259,7 @@ READER_REGISTRY: Dict[str, Type[BaseReader]] = {
     '.docx': DocxReader,
     '.md': MarkdownReader,
     '.txt': MarkdownReader,
+    '.csv': MarkdownReader,  # CSV files are plain text
 }
 
 

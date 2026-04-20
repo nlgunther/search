@@ -20,7 +20,10 @@ import sys
 
 def glob_matches(filepath: str, pattern: str) -> bool:
     """
-    Check if filepath matches glob pattern (case-sensitive).
+    Check if filepath matches glob pattern.
+    
+    On Windows: Case-insensitive matching (*.csv matches *.CSV)
+    On Unix/Linux: Case-sensitive matching (*.csv does NOT match *.CSV)
     
     Supports:
     - * matches any characters except /
@@ -32,11 +35,9 @@ def glob_matches(filepath: str, pattern: str) -> bool:
     Patterns without / match filename only.
     Patterns with / match against path and can appear anywhere in the path.
     
-    Note: Matching is always case-sensitive regardless of platform.
-    
     Args:
         filepath: Path to check
-        pattern: Glob pattern (case-sensitive)
+        pattern: Glob pattern
         
     Returns:
         True if filepath matches
@@ -44,37 +45,56 @@ def glob_matches(filepath: str, pattern: str) -> bool:
     Examples:
         >>> glob_matches("/docs/file.pdf", "*.pdf")
         True
-        >>> glob_matches("/docs/file.PDF", "*.pdf")
-        False
+        >>> # On Windows: case-insensitive
+        >>> glob_matches("/docs/file.PDF", "*.pdf")  # Windows: True, Linux: False
         >>> glob_matches("/docs/2024/Q1/inv.pdf", "**/2024/**/*.pdf")
         True
     """
+    import platform
+    
     # Normalize separators
     filepath = filepath.replace('\\', '/')
     pattern = pattern.replace('\\', '/')
     
+    # Use case-insensitive matching on Windows
+    # Windows filesystem is case-insensitive, so *.csv should match *.CSV
+    is_windows = platform.system() == 'Windows'
+    
+    if is_windows:
+        filepath_compare = filepath.lower()
+        pattern_compare = pattern.lower()
+    else:
+        filepath_compare = filepath
+        pattern_compare = pattern
+    
     # Filename-only pattern
-    if '/' not in pattern:
-        filename = filepath.split('/')[-1]
-        # Use fnmatchcase for case-sensitive matching on all platforms
-        return fnmatch.fnmatchcase(filename, pattern)
+    if '/' not in pattern_compare:
+        filename = filepath_compare.split('/')[-1]
+        # Use fnmatch (case-insensitive on Windows, case-sensitive on Unix)
+        if is_windows:
+            return fnmatch.fnmatch(filename, pattern_compare)
+        else:
+            return fnmatch.fnmatchcase(filename, pattern_compare)
     
     # Path pattern - make it match anywhere unless rooted
-    if not pattern.startswith('**') and not pattern.startswith('/'):
-        pattern = '**/' + pattern
+    if not pattern_compare.startswith('**') and not pattern_compare.startswith('/'):
+        pattern_compare = '**/' + pattern_compare
     
-    # Convert to regex (case-sensitive)
-    pattern = pattern.replace('**', '\x00STAR2\x00')
-    pattern = re.escape(pattern)
-    pattern = pattern.replace('\\*', '[^/]*')
-    pattern = pattern.replace('\\?', '.')
-    pattern = pattern.replace('\\[', '[').replace('\\]', ']')
-    pattern = pattern.replace('\\!', '!')
-    pattern = pattern.replace('\x00STAR2\x00', '.*')
-    pattern = '^' + pattern + '$'
+    # Convert to regex
+    pattern_regex = pattern_compare.replace('**', '\x00STAR2\x00')
+    pattern_regex = re.escape(pattern_regex)
+    pattern_regex = pattern_regex.replace('\\*', '[^/]*')
+    pattern_regex = pattern_regex.replace('\\?', '.')
+    pattern_regex = pattern_regex.replace('\\[', '[').replace('\\]', ']')
+    pattern_regex = pattern_regex.replace('\\!', '!')
+    pattern_regex = pattern_regex.replace('\x00STAR2\x00', '.*')
+    pattern_regex = '^' + pattern_regex + '$'
     
-    # Use case-sensitive regex matching
-    return re.match(pattern, filepath) is not None
+    # Match (case-insensitive on Windows)
+    if is_windows:
+        return re.match(pattern_regex, filepath_compare, re.IGNORECASE) is not None
+    else:
+        return re.match(pattern_regex, filepath_compare) is not None
 
 
 def filter_files_by_glob(files: List[str], patterns: Optional[str]) -> List[str]:

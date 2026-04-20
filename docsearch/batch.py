@@ -30,7 +30,18 @@ def collect_files(directory: str, recursive: bool = True) -> List[str]:
         
     Returns:
         List of file paths
+        
+    Raises:
+        FileNotFoundError: If directory doesn't exist
+        NotADirectoryError: If path is not a directory
     """
+    # Check if directory exists
+    if not os.path.exists(directory):
+        raise FileNotFoundError(f"Directory not found: {directory}")
+    
+    if not os.path.isdir(directory):
+        raise NotADirectoryError(f"Not a directory: {directory}")
+    
     files = []
     
     if recursive:

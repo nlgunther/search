@@ -114,6 +114,9 @@ Examples:
   # Search filenames only (fast)
   docsearch search /docs "2024-\d+" --metadata-only
   
+  # Save results to file
+  docsearch search /docs "pattern" --output results.txt
+  
   # Files modified in 2026
   docsearch search /docs ".*" --metadata-only --modified-after 2026-01-01 --modified-before 2026-12-31
   
@@ -131,6 +134,8 @@ Examples:
                               help='Case-insensitive search')
     search_parser.add_argument('-m', '--metadata-only', action='store_true',
                               help='Search filenames/paths only (no file reading)')
+    search_parser.add_argument('-o', '--output', metavar='FILE',
+                              help='Write results to file instead of stdout')
     search_parser.add_argument('-r', '--recursive', action='store_true', default=True)
     search_parser.add_argument('--no-recursive', action='store_false', dest='recursive')
     search_parser.add_argument('-v', '--verbose', action='store_true')
@@ -286,7 +291,7 @@ def apply_metadata_filters(files, args):
         return files
 
 
-def _search_metadata(files, pattern, verbose):
+def _search_metadata(files, pattern, verbose, output_file=None):
     """
     Search only filenames/paths (no file reading).
     
@@ -294,6 +299,7 @@ def _search_metadata(files, pattern, verbose):
         files: List of file paths
         pattern: Compiled regex pattern
         verbose: Show verbose output
+        output_file: Optional file handle to write results to
         
     Returns:
         Exit code (0 = success)
@@ -309,15 +315,22 @@ def _search_metadata(files, pattern, verbose):
         if match:
             matches_found.append((filepath, match.span()))
     
+    # Write to output file or stdout
+    out = output_file if output_file else sys.stdout
+    
     # Display results
     if matches_found:
-        print(f"\nMatched files:")
+        print(f"\nMatched files:", file=out)
         for filepath, (start, end) in matches_found:
             # Highlight the match in the path
             highlighted = highlight_match(filepath, start, end)
-            print(f"  {highlighted}")
+            print(f"  {highlighted}", file=out)
     
     print(f"\nTotal: {len(matches_found)} files matched (out of {len(files)} searched)", file=sys.stderr)
+    
+    if output_file:
+        print(f"Results written to output file", file=sys.stderr)
+    
     return 0
 
 
@@ -348,39 +361,82 @@ def cmd_search(args):
         print("No files matched filters", file=sys.stderr)
         return 0
     
-    # Metadata-only search (fast - no file reading)
-    if args.metadata_only:
-        return _search_metadata(files, pattern, args.verbose)
+    # Open output file if specified
+    output_file = None
+    if args.output:
+        try:
+            output_file = open(args.output, 'w', encoding='utf-8')
+        except IOError as e:
+            print(f"Error opening output file: {e}", file=sys.stderr)
+            return 1
     
-    # Content search (reads files)
-    total_matches = 0
-    files_with_matches = 0
-    
-    for filepath in files:
-        if args.verbose:
-            print(f"Searching: {filepath}", file=sys.stderr)
+    try:
+        # Metadata-only search (fast - no file reading)
+        if args.metadata_only:
+            return _search_metadata(files, pattern, args.verbose, output_file)
         
-        result = read_file(filepath)
+        # Content search (reads files)
+        total_matches = 0
+        files_with_matches = 0
+        files_skipped = 0
+        unsupported_formats = set()
         
-        if result.ok:
-            matches = list(pattern.finditer(result.text))
-            if matches:
-                files_with_matches += 1
-                total_matches += len(matches)
-                print(f"\n{filepath}: {len(matches)} matches")
+        for filepath in files:
+            if args.verbose:
+                print(f"Searching: {filepath}", file=sys.stderr)
+            
+            result = read_file(filepath)
+            
+            if result.ok:
+                matches = list(pattern.finditer(result.text))
+                if matches:
+                    files_with_matches += 1
+                    total_matches += len(matches)
+                    
+                    # Write to output file or stdout
+                    out = output_file if output_file else sys.stdout
+                    print(f"\n{filepath}: {len(matches)} matches", file=out)
+                    
+                    # Show first few matches
+                    for match in matches[:5]:
+                        start = max(0, match.start() - 40)
+                        end = min(len(result.text), match.end() + 40)
+                        context = result.text[start:end]
+                        print(f"  ...{context}...", file=out)
+                    
+                    if len(matches) > 5:
+                        print(f"  ... and {len(matches) - 5} more matches", file=out)
+            else:
+                # File couldn't be read - track why
+                files_skipped += 1
+                ext = os.path.splitext(filepath)[1].lower()
                 
-                # Show first few matches
-                for match in matches[:5]:
-                    start = max(0, match.start() - 40)
-                    end = min(len(result.text), match.end() + 40)
-                    context = result.text[start:end]
-                    print(f"  ...{context}...")
-                
-                if len(matches) > 5:
-                    print(f"  ... and {len(matches) - 5} more matches")
+                if result.status == ReadStatus.UNSUPPORTED_FORMAT:
+                    unsupported_formats.add(ext)
+                    if args.verbose:
+                        print(f"  Skipped: {result.error}", file=sys.stderr)
+                elif args.verbose:
+                    print(f"  Skipped: {result.error}", file=sys.stderr)
+        
+        # Show summary with warnings (always to stderr)
+        print(f"\nTotal: {total_matches} matches in {files_with_matches}/{len(files)} files", file=sys.stderr)
+        
+        if files_skipped > 0:
+            print(f"Warning: Skipped {files_skipped} file(s)", file=sys.stderr)
+            
+            if unsupported_formats:
+                print(f"  Unsupported formats: {', '.join(sorted(unsupported_formats))}", file=sys.stderr)
+                print(f"  Run 'docsearch formats' to see supported formats", file=sys.stderr)
+        
+        if output_file:
+            print(f"Results written to: {args.output}", file=sys.stderr)
+        
+        return 0
     
-    print(f"\nTotal: {total_matches} matches in {files_with_matches}/{len(files)} files", file=sys.stderr)
-    return 0
+    finally:
+        if output_file:
+            output_file.flush()
+            output_file.close()
 
 
 def cmd_info(args):
