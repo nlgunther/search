@@ -407,6 +407,51 @@ class TestFileMetadataSearch:
 class TestSearchOutput:
     """Test search command with --output flag."""
     
+    def test_invalid_directory(self):
+        """Test search with invalid paths."""
+        import sys
+        import os
+        import tempfile
+        from io import StringIO
+        
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        from docsearch.cli import cmd_search
+        
+        # Test 1: Non-existent path
+        class Args1:
+            path = '/this/path/does/not/exist'
+            pattern = 'test'
+            glob = None
+            ignore_case = False
+            metadata_only = False
+            output = None
+            recursive = True
+            verbose = False
+            modified_after = None
+            modified_before = None
+            created_after = None
+            created_before = None
+            size_min = None
+            size_max = None
+            extension = None
+            pdf_author = None
+            pdf_title = None
+        
+        old_stderr = sys.stderr
+        sys.stderr = StringIO()
+        
+        try:
+            result = cmd_search(Args1())
+            stderr_output = sys.stderr.getvalue()
+            
+            assert result == 1
+            assert 'Error:' in stderr_output
+            assert 'not found' in stderr_output.lower()
+            
+        finally:
+            sys.stderr = old_stderr
+    
     def test_search_with_output_file(self):
         """Test search command writes to output file."""
         import tempfile
@@ -541,6 +586,213 @@ class TestSearchOutput:
                 sys.stderr = old_stderr
 
 
+class TestNewFileFormats:
+    """Test newly added file format support."""
+    
+    def test_python_file_support(self):
+        """Test reading Python files."""
+        from docsearch import read_file
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = os.path.join(tmpdir, 'test.py')
+            with open(py_file, 'w') as f:
+                f.write('def hello():\n    print("Hello, World!")\n')
+            
+            result = read_file(py_file)
+            assert result.ok
+            assert 'def hello' in result.text
+            assert 'Hello, World!' in result.text
+    
+    def test_css_file_support(self):
+        """Test reading CSS files."""
+        from docsearch import read_file
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            css_file = os.path.join(tmpdir, 'style.css')
+            with open(css_file, 'w') as f:
+                f.write('.container { width: 100%; }\n')
+            
+            result = read_file(css_file)
+            assert result.ok
+            assert 'container' in result.text
+            assert 'width' in result.text
+    
+    def test_json_file_support(self):
+        """Test reading JSON files."""
+        from docsearch import read_file
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_file = os.path.join(tmpdir, 'data.json')
+            with open(json_file, 'w') as f:
+                f.write('{"name": "test", "value": 123}')
+            
+            result = read_file(json_file)
+            assert result.ok
+            assert 'name' in result.text
+            assert 'test' in result.text
+    
+    def test_yaml_file_support(self):
+        """Test reading YAML files."""
+        from docsearch import read_file
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yaml_file = os.path.join(tmpdir, 'config.yml')
+            with open(yaml_file, 'w') as f:
+                f.write('database:\n  host: localhost\n  port: 5432\n')
+            
+            result = read_file(yaml_file)
+            assert result.ok
+            assert 'database' in result.text
+            assert 'localhost' in result.text
+    
+    def test_shell_script_support(self):
+        """Test reading shell script files."""
+        from docsearch import read_file
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sh_file = os.path.join(tmpdir, 'script.sh')
+            with open(sh_file, 'w') as f:
+                f.write('#!/bin/bash\necho "Hello"\n')
+            
+            result = read_file(sh_file)
+            assert result.ok
+            assert 'bash' in result.text
+            assert 'echo' in result.text
+    
+    def test_odt_file_support(self):
+        """Test reading ODT files."""
+        from docsearch import read_file
+        from docsearch.models import ReadStatus
+        import tempfile
+        import os
+        import zipfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            odt_file = os.path.join(tmpdir, 'document.odt')
+            
+            # Create a minimal valid ODT file
+            with zipfile.ZipFile(odt_file, 'w') as odt_zip:
+                # Create content.xml with ODT structure
+                content_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content 
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+    <office:body>
+        <office:text>
+            <text:p>This is a test paragraph.</text:p>
+            <text:h>This is a heading</text:h>
+            <text:p>Another paragraph with important information.</text:p>
+        </office:text>
+    </office:body>
+</office:document-content>'''
+                odt_zip.writestr('content.xml', content_xml)
+            
+            result = read_file(odt_file)
+            assert result.ok
+            assert 'test paragraph' in result.text
+            assert 'heading' in result.text
+            assert 'important information' in result.text
+    
+    def test_odt_empty_file(self):
+        """Test ODT file with no text content."""
+        from docsearch import read_file
+        from docsearch.models import ReadStatus
+        import tempfile
+        import os
+        import zipfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            odt_file = os.path.join(tmpdir, 'empty.odt')
+            
+            # Create ODT with no text
+            with zipfile.ZipFile(odt_file, 'w') as odt_zip:
+                content_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content 
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+    <office:body>
+        <office:text>
+        </office:text>
+    </office:body>
+</office:document-content>'''
+                odt_zip.writestr('content.xml', content_xml)
+            
+            result = read_file(odt_file)
+            assert not result.ok
+            assert result.status == ReadStatus.EMPTY_FILE
+    
+    def test_odt_invalid_file(self):
+        """Test invalid ODT file."""
+        from docsearch import read_file
+        from docsearch.models import ReadStatus
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_odt = os.path.join(tmpdir, 'fake.odt')
+            
+            # Create a file that's not a valid ZIP
+            with open(fake_odt, 'w') as f:
+                f.write('This is not a real ODT file')
+            
+            result = read_file(fake_odt)
+            assert not result.ok
+            assert result.status == ReadStatus.READ_ERROR
+            assert 'ZIP' in result.error or 'zip' in result.error.lower()
+    
+    def test_multiple_code_formats(self):
+        """Test that various code file extensions are supported."""
+        from docsearch import get_supported_formats
+        
+        formats = get_supported_formats()
+        
+        # Check common programming languages
+        code_extensions = [
+            '.py', '.js', '.java', '.c', '.cpp', '.cs', '.go', 
+            '.rs', '.rb', '.php', '.swift', '.kt', '.ts'
+        ]
+        
+        for ext in code_extensions:
+            assert ext in formats, f'{ext} should be supported'
+    
+    def test_config_file_formats(self):
+        """Test that config file formats are supported."""
+        from docsearch import get_supported_formats
+        
+        formats = get_supported_formats()
+        
+        config_extensions = [
+            '.ini', '.conf', '.cfg', '.toml', '.env', '.yml', '.yaml'
+        ]
+        
+        for ext in config_extensions:
+            assert ext in formats, f'{ext} should be supported'
+    
+    def test_web_file_formats(self):
+        """Test that web-related formats are supported."""
+        from docsearch import get_supported_formats
+        
+        formats = get_supported_formats()
+        
+        web_extensions = [
+            '.html', '.htm', '.css', '.scss', '.sass', '.less',
+            '.xml', '.xsl', '.xslt', '.json'
+        ]
+        
+        for ext in web_extensions:
+            assert ext in formats, f'{ext} should be supported'
+
+
 if __name__ == "__main__":
     if HAS_PYTEST:
         pytest.main([__file__, "-v"])
@@ -555,7 +807,8 @@ if __name__ == "__main__":
             TestReadResult,
             TestMetadataSearch,
             TestFileMetadataSearch,
-            TestSearchOutput
+            TestSearchOutput,
+            TestNewFileFormats
         ]
         
         total_tests = 0

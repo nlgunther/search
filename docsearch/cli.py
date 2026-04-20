@@ -184,10 +184,24 @@ def cmd_extract(args):
     if args.file_list:
         files = files_from_file(args.file_list)
     elif args.path:
+        if not os.path.exists(args.path):
+            print(f"Error: Path not found: {args.path}", file=sys.stderr)
+            return 1
+        
         if os.path.isfile(args.path):
             files = [args.path]
+        elif os.path.isdir(args.path):
+            try:
+                files = collect_files(args.path, args.recursive)
+            except FileNotFoundError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            except NotADirectoryError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
         else:
-            files = collect_files(args.path, args.recursive)
+            print(f"Error: Path is neither a file nor a directory: {args.path}", file=sys.stderr)
+            return 1
     else:
         print("Error: Specify path or --file-list", file=sys.stderr)
         return 1
@@ -346,10 +360,24 @@ def cmd_search(args):
         return 1
     
     # Get files
+    if not os.path.exists(args.path):
+        print(f"Error: Path not found: {args.path}", file=sys.stderr)
+        return 1
+    
     if os.path.isfile(args.path):
         files = [args.path]
+    elif os.path.isdir(args.path):
+        try:
+            files = collect_files(args.path, args.recursive)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except NotADirectoryError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
     else:
-        files = collect_files(args.path, args.recursive)
+        print(f"Error: Path is neither a file nor a directory: {args.path}", file=sys.stderr)
+        return 1
     
     # Apply glob filter
     files = apply_glob_filter(files, args.glob, args.verbose)
