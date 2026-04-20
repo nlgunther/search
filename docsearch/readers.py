@@ -181,6 +181,95 @@ class DocxReader:
             )
 
 
+class OdtReader:
+    """Reader for OpenDocument Text (.odt) files."""
+    
+    @staticmethod
+    def can_read(filepath: str) -> bool:
+        return filepath.lower().endswith('.odt')
+    
+    @staticmethod
+    def read(filepath: str) -> ReadResult:
+        if not os.path.exists(filepath):
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.NOT_FOUND,
+                error="File not found"
+            )
+        
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            
+            # ODT files are ZIP archives containing XML
+            with zipfile.ZipFile(filepath, 'r') as odt_zip:
+                # Extract content.xml which contains the document text
+                content_xml = odt_zip.read('content.xml')
+            
+            # Parse XML and extract text
+            root = ET.fromstring(content_xml)
+            
+            # ODT uses namespaces - need to handle them
+            namespaces = {
+                'office': 'urn:oasis:names:tc:opendocument:xmlns:office:1.0',
+                'text': 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'
+            }
+            
+            # Extract all text elements
+            text_parts = []
+            for elem in root.iter():
+                # Get text from text:p (paragraphs) and text:h (headings)
+                if elem.tag.endswith('}p') or elem.tag.endswith('}h'):
+                    if elem.text:
+                        text_parts.append(elem.text)
+                    # Also get text from child elements
+                    for child in elem.iter():
+                        if child.text and child != elem:
+                            text_parts.append(child.text)
+                        if child.tail:
+                            text_parts.append(child.tail)
+            
+            text = '\n'.join(text_parts)
+            
+            if not text.strip():
+                return ReadResult(
+                    filepath=filepath,
+                    status=ReadStatus.EMPTY_FILE,
+                    error="File is empty"
+                )
+            
+            metadata = FileMetadata(
+                file_size=os.path.getsize(filepath),
+                word_count=len(text.split())
+            )
+            
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.SUCCESS,
+                text=text,
+                metadata=metadata
+            )
+            
+        except zipfile.BadZipFile:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error="Invalid ODT file (not a valid ZIP archive)"
+            )
+        except KeyError:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error="Invalid ODT file (missing content.xml)"
+            )
+        except Exception as e:
+            return ReadResult(
+                filepath=filepath,
+                status=ReadStatus.READ_ERROR,
+                error=f"Error reading ODT: {str(e)}"
+            )
+
+
 class MarkdownReader:
     """Reader for Markdown and plain text files."""
     
@@ -257,8 +346,54 @@ class MarkdownReader:
 READER_REGISTRY: Dict[str, Type[BaseReader]] = {
     '.pdf': PDFReader,
     '.docx': DocxReader,
+    '.odt': OdtReader,  # OpenDocument Text
     '.md': MarkdownReader,
     '.txt': MarkdownReader,
+    '.csv': MarkdownReader,  # CSV files are plain text
+    '.xml': MarkdownReader,  # XML files are plain text
+    '.json': MarkdownReader,  # JSON files are plain text
+    '.html': MarkdownReader,  # HTML files are plain text
+    '.htm': MarkdownReader,   # HTML files are plain text
+    '.log': MarkdownReader,   # Log files are plain text
+    '.yml': MarkdownReader,   # YAML files are plain text
+    '.yaml': MarkdownReader,  # YAML files are plain text
+    # Code files (all plain text)
+    '.py': MarkdownReader,    # Python
+    '.js': MarkdownReader,    # JavaScript
+    '.ts': MarkdownReader,    # TypeScript
+    '.java': MarkdownReader,  # Java
+    '.c': MarkdownReader,     # C
+    '.cpp': MarkdownReader,   # C++
+    '.h': MarkdownReader,     # C/C++ headers
+    '.cs': MarkdownReader,    # C#
+    '.go': MarkdownReader,    # Go
+    '.rs': MarkdownReader,    # Rust
+    '.rb': MarkdownReader,    # Ruby
+    '.php': MarkdownReader,   # PHP
+    '.swift': MarkdownReader, # Swift
+    '.kt': MarkdownReader,    # Kotlin
+    '.r': MarkdownReader,     # R
+    '.sql': MarkdownReader,   # SQL
+    '.sh': MarkdownReader,    # Shell scripts
+    '.bash': MarkdownReader,  # Bash scripts
+    '.ps1': MarkdownReader,   # PowerShell
+    '.bat': MarkdownReader,   # Batch files
+    # Markup/styling
+    '.css': MarkdownReader,   # CSS
+    '.scss': MarkdownReader,  # SCSS
+    '.sass': MarkdownReader,  # SASS
+    '.less': MarkdownReader,  # LESS
+    '.xsl': MarkdownReader,   # XSL
+    '.xslt': MarkdownReader,  # XSLT
+    # Config files
+    '.ini': MarkdownReader,   # INI config
+    '.conf': MarkdownReader,  # Config files
+    '.cfg': MarkdownReader,   # Config files
+    '.toml': MarkdownReader,  # TOML
+    '.env': MarkdownReader,   # Environment files
+    # Other text formats
+    '.rst': MarkdownReader,   # ReStructuredText
+    '.tex': MarkdownReader,   # LaTeX
 }
 
 
